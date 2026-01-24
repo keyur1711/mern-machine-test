@@ -9,7 +9,6 @@ const ListItem = require('../models/List');
 const Agent = require('../models/Agent');
 const authenticate = require('../middleware/auth');
 
-// Configure multer for file upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = 'uploads/';
@@ -23,7 +22,6 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter - only allow csv, xlsx, xls
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['.csv', '.xlsx', '.xls'];
   const ext = path.extname(file.originalname).toLowerCase();
@@ -38,10 +36,9 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
-// Parse CSV file
 const parseCSV = (filePath) => {
   return new Promise((resolve, reject) => {
     const results = [];
@@ -53,7 +50,6 @@ const parseCSV = (filePath) => {
   });
 };
 
-// Parse Excel file
 const parseExcel = (filePath) => {
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
@@ -61,7 +57,6 @@ const parseExcel = (filePath) => {
   return XLSX.utils.sheet_to_json(worksheet);
 };
 
-// Upload and distribute CSV
 router.post('/upload', authenticate, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -73,18 +68,16 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     
     let data = [];
 
-    // Parse file based on extension
     if (fileExt === '.csv') {
       data = await parseCSV(filePath);
     } else if (fileExt === '.xlsx' || fileExt === '.xls') {
       data = await parseExcel(filePath);
     }
 
-    // Validate CSV format - check for required columns
     const requiredColumns = ['FirstName', 'firstname', 'firstName', 'Phone', 'phone', 'Notes', 'notes'];
     const firstRow = data[0];
     if (!firstRow) {
-      fs.unlinkSync(filePath); // Delete uploaded file
+      fs.unlinkSync(filePath); 
       return res.status(400).json({ message: 'File is empty' });
     }
 
@@ -100,7 +93,6 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
       });
     }
 
-    // Normalize column names (case-insensitive)
     const normalizedData = data.map(row => {
       const normalized = {};
       Object.keys(row).forEach(key => {
@@ -114,23 +106,20 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
         }
       });
       return normalized;
-    }).filter(row => row.firstName && row.phone); // Filter out invalid rows
+    }).filter(row => row.firstName && row.phone); 
 
-    // Get all agents
     const agents = await Agent.find();
     if (agents.length === 0) {
       fs.unlinkSync(filePath);
       return res.status(400).json({ message: 'No agents found. Please create agents first.' });
     }
 
-    // Distribute items equally among agents (up to 5 agents)
     const activeAgents = agents.slice(0, 5);
     const itemsPerAgent = Math.floor(normalizedData.length / activeAgents.length);
     const remainder = normalizedData.length % activeAgents.length;
 
     const distributedItems = [];
 
-    // Distribute items
     let currentIndex = 0;
     for (let i = 0; i < activeAgents.length; i++) {
       const agentId = activeAgents[i]._id;
@@ -150,7 +139,6 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
       }
     }
 
-    // Clean up uploaded file
     fs.unlinkSync(filePath);
 
     res.json({
@@ -167,12 +155,10 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
   }
 });
 
-// Get distributed lists for all agents
 router.get('/distributed', authenticate, async (req, res) => {
   try {
     const items = await ListItem.find().populate('agentId', 'name email mobile');
     
-    // Group by agent
     const groupedByAgent = {};
     items.forEach(item => {
       const agentId = item.agentId._id.toString();

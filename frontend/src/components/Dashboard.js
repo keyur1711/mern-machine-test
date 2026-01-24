@@ -1,32 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
-import './Dashboard.css';
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import api from "../utils/api";
+import "./Dashboard.css";
 
 function Dashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('agents');
+  const [activeTab, setActiveTab] = useState("agents");
   const [agents, setAgents] = useState([]);
   const [distributedLists, setDistributedLists] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [message, setMessage] = useState({ type: "", text: "" });
 
-  // Agent form state
   const [agentForm, setAgentForm] = useState({
-    name: '',
-    email: '',
-    mobile: '',
-    password: ''
+    name: "",
+    email: "",
+    mobile: "",
+    password: "",
   });
 
-  // File upload state
   const [selectedFile, setSelectedFile] = useState(null);
 
   useEffect(() => {
-    // Check if user is logged in
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (!token) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
@@ -36,52 +33,55 @@ function Dashboard() {
 
   const loadAgents = async () => {
     try {
-      const response = await api.get('/agents');
+      const response = await api.get("/agents");
       setAgents(response.data);
     } catch (error) {
-      console.error('Error loading agents:', error);
-      showMessage('error', 'Failed to load agents');
+      console.error("Error loading agents:", error);
+      showMessage("error", "Failed to load agents");
     }
   };
 
   const loadDistributedLists = async () => {
     try {
-      const response = await api.get('/lists/distributed');
+      const response = await api.get("/lists/distributed");
       setDistributedLists(response.data.distributedLists || []);
     } catch (error) {
-      console.error('Error loading distributed lists:', error);
+      console.error("Error loading distributed lists:", error);
     }
   };
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
-    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+    setTimeout(() => setMessage({ type: "", text: "" }), 5000);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
+    localStorage.removeItem("token");
+    navigate("/login");
   };
 
   const handleAgentFormChange = (e) => {
     setAgentForm({
       ...agentForm,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
   const handleCreateAgent = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: "", text: "" });
 
     try {
-      await api.post('/agents', agentForm);
-      showMessage('success', 'Agent created successfully');
-      setAgentForm({ name: '', email: '', mobile: '', password: '' });
+      await api.post("/agents", agentForm);
+      showMessage("success", "Agent created successfully");
+      setAgentForm({ name: "", email: "", mobile: "", password: "" });
       loadAgents();
     } catch (error) {
-      showMessage('error', error.response?.data?.message || 'Failed to create agent');
+      showMessage(
+        "error",
+        error.response?.data?.message || "Failed to create agent",
+      );
     } finally {
       setLoading(false);
     }
@@ -90,13 +90,13 @@ function Dashboard() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const ext = file.name.split('.').pop().toLowerCase();
-      if (['csv', 'xlsx', 'xls'].includes(ext)) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (["csv", "xlsx", "xls"].includes(ext)) {
         setSelectedFile(file);
-        setMessage({ type: '', text: '' });
+        setMessage({ type: "", text: "" });
       } else {
-        showMessage('error', 'Only CSV, XLSX, and XLS files are allowed');
-        e.target.value = '';
+        showMessage("error", "Only CSV, XLSX, and XLS files are allowed");
+        e.target.value = "";
       }
     }
   };
@@ -104,29 +104,32 @@ function Dashboard() {
   const handleFileUpload = async (e) => {
     e.preventDefault();
     if (!selectedFile) {
-      showMessage('error', 'Please select a file');
+      showMessage("error", "Please select a file");
       return;
     }
 
     setLoading(true);
-    setMessage({ type: '', text: '' });
+    setMessage({ type: "", text: "" });
 
     try {
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append("file", selectedFile);
 
-      await api.post('/lists/upload', formData, {
+      await api.post("/lists/upload", formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          "Content-Type": "multipart/form-data",
+        },
       });
 
-      showMessage('success', 'File uploaded and distributed successfully');
+      showMessage("success", "File uploaded and distributed successfully");
       setSelectedFile(null);
       e.target.reset();
       loadDistributedLists();
     } catch (error) {
-      showMessage('error', error.response?.data?.message || 'Failed to upload file');
+      showMessage(
+        "error",
+        error.response?.data?.message || "Failed to upload file",
+      );
     } finally {
       setLoading(false);
     }
@@ -143,34 +146,29 @@ function Dashboard() {
 
       <div className="container">
         {message.text && (
-          <div className={`alert alert-${message.type}`}>
-            {message.text}
-          </div>
+          <div className={`alert alert-${message.type}`}>{message.text}</div>
         )}
-
         <div className="tabs">
           <button
-            className={`tab ${activeTab === 'agents' ? 'active' : ''}`}
-            onClick={() => setActiveTab('agents')}
+            className={`tab ${activeTab === "agents" ? "active" : ""}`}
+            onClick={() => setActiveTab("agents")}
           >
             Agents
           </button>
           <button
-            className={`tab ${activeTab === 'upload' ? 'active' : ''}`}
-            onClick={() => setActiveTab('upload')}
+            className={`tab ${activeTab === "upload" ? "active" : ""}`}
+            onClick={() => setActiveTab("upload")}
           >
             Upload CSV
           </button>
           <button
-            className={`tab ${activeTab === 'lists' ? 'active' : ''}`}
-            onClick={() => setActiveTab('lists')}
+            className={`tab ${activeTab === "lists" ? "active" : ""}`}
+            onClick={() => setActiveTab("lists")}
           >
             Distributed Lists
           </button>
         </div>
-
-        {/* Agents Tab */}
-        {activeTab === 'agents' && (
+        {activeTab === "agents" && (
           <div>
             <div className="card">
               <h3>Add New Agent</h3>
@@ -220,8 +218,12 @@ function Dashboard() {
                     />
                   </div>
                 </div>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Agent'}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading}
+                >
+                  {loading ? "Creating..." : "Create Agent"}
                 </button>
               </form>
             </div>
@@ -240,7 +242,7 @@ function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {agents.map(agent => (
+                    {agents.map((agent) => (
                       <tr key={agent._id}>
                         <td>{agent.name}</td>
                         <td>{agent.email}</td>
@@ -253,9 +255,7 @@ function Dashboard() {
             </div>
           </div>
         )}
-
-        {/* Upload CSV Tab */}
-        {activeTab === 'upload' && (
+        {activeTab === "upload" && (
           <div className="card">
             <h3>Upload CSV/XLSX File</h3>
             <p className="info-text">
@@ -274,19 +274,25 @@ function Dashboard() {
               {selectedFile && (
                 <p className="success">Selected: {selectedFile.name}</p>
               )}
-              <button type="submit" className="btn btn-primary" disabled={loading || !selectedFile}>
-                {loading ? 'Uploading...' : 'Upload and Distribute'}
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={loading || !selectedFile}
+              >
+                {loading ? "Uploading..." : "Upload and Distribute"}
               </button>
             </form>
           </div>
         )}
 
-        {/* Distributed Lists Tab */}
-        {activeTab === 'lists' && (
+        {activeTab === "lists" && (
           <div>
             {distributedLists.length === 0 ? (
               <div className="card">
-                <p>No distributed lists yet. Upload a CSV file to distribute items among agents.</p>
+                <p>
+                  No distributed lists yet. Upload a CSV file to distribute
+                  items among agents.
+                </p>
               </div>
             ) : (
               distributedLists.map((group, index) => (
@@ -294,8 +300,12 @@ function Dashboard() {
                   <h3>
                     Agent: {group.agent.name} ({group.items.length} items)
                   </h3>
-                  <p><strong>Email:</strong> {group.agent.email}</p>
-                  <p><strong>Mobile:</strong> {group.agent.mobile}</p>
+                  <p>
+                    <strong>Email:</strong> {group.agent.email}
+                  </p>
+                  <p>
+                    <strong>Mobile:</strong> {group.agent.mobile}
+                  </p>
                   <table>
                     <thead>
                       <tr>
@@ -305,11 +315,11 @@ function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {group.items.map(item => (
+                      {group.items.map((item) => (
                         <tr key={item.id}>
                           <td>{item.firstName}</td>
                           <td>{item.phone}</td>
-                          <td>{item.notes || '-'}</td>
+                          <td>{item.notes || "-"}</td>
                         </tr>
                       ))}
                     </tbody>

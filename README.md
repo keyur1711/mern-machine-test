@@ -40,7 +40,7 @@ cd backend
 npm install
 
 # Create .env file
-cp .env.example .env
+cp .env
 
 # Edit .env file with your MongoDB connection string
 # MONGODB_URI=mongodb://localhost:27017/mern_assignment
