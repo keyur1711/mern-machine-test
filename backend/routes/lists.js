@@ -8,6 +8,7 @@ const path = require('path');
 const ListItem = require('../models/List');
 const Agent = require('../models/Agent');
 const authenticate = require('../middleware/auth');
+const mongoose = require('mongoose');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -161,6 +162,9 @@ router.get('/distributed', authenticate, async (req, res) => {
     
     const groupedByAgent = {};
     items.forEach(item => {
+      if (!item.agentId) {
+        return;
+      }
       const agentId = item.agentId._id.toString();
       if (!groupedByAgent[agentId]) {
         groupedByAgent[agentId] = {
@@ -177,7 +181,8 @@ router.get('/distributed', authenticate, async (req, res) => {
         id: item._id,
         firstName: item.firstName,
         phone: item.phone,
-        notes: item.notes
+        notes: item.notes,
+        status: item.status || 'pending',
       });
     });
 
@@ -186,6 +191,47 @@ router.get('/distributed', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Get distributed lists error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Mark a specific list item as completed (call done)
+router.patch('/:id/complete', authenticate, async (req, res) => {
+  try {
+    const itemId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(itemId)) {
+      return res.status(400).json({ message: 'Invalid list item ID' });
+    }
+
+    const item = await ListItem.findById(itemId);
+
+    if (!item) {
+      return res.status(404).json({ message: 'List item not found' });
+    }
+
+    if (item.status === 'completed') {
+      return res.json({
+        message: 'Task already marked as completed',
+        item: {
+          id: item._id,
+          status: item.status,
+        },
+      });
+    }
+
+    item.status = 'completed';
+    await item.save();
+
+    return res.json({
+      message: 'Task marked as completed',
+      item: {
+        id: item._id,
+        status: item.status,
+      },
+    });
+  } catch (error) {
+    console.error('Complete list item error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

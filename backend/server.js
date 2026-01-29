@@ -12,6 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/agents", require("./routes/agents"));
 app.use("/api/lists", require("./routes/lists"));
+app.use("/api/call-list", require("./routes/callList"));
 
 mongoose
   .connect(

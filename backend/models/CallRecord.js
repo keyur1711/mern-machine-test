@@ -1,30 +1,37 @@
 const mongoose = require("mongoose");
 
-const listItemSchema = new mongoose.Schema(
+const callRecordSchema = new mongoose.Schema(
   {
-    firstName: {
+    recordNo: {
+      type: Number,
+      required: true,
+      index: true,
+    },
+    name: {
       type: String,
       required: true,
       trim: true,
     },
-    phone: {
+    mobile: {
       type: String,
       required: true,
       trim: true,
     },
-    notes: {
+    email: {
       type: String,
+      required: true,
       trim: true,
+      lowercase: true,
     },
     agentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Agent",
-      required: true,
     },
     status: {
       type: String,
       enum: ["pending", "completed"],
       default: "pending",
+      index: true,
     },
   },
   {
@@ -32,4 +39,7 @@ const listItemSchema = new mongoose.Schema(
   },
 );
 
-module.exports = mongoose.model("ListItem", listItemSchema);
+callRecordSchema.index({ recordNo: 1 }, { unique: true });
+
+module.exports = mongoose.model("CallRecord", callRecordSchema);
+

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../utils/api";
 import "./Dashboard.css";
@@ -8,8 +8,10 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState("agents");
   const [agents, setAgents] = useState([]);
   const [distributedLists, setDistributedLists] = useState([]);
+  const [callList, setCallList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  const [editingAgent, setEditingAgent] = useState(null);
 
   const [agentForm, setAgentForm] = useState({
     name: "",
@@ -19,6 +21,36 @@ function Dashboard() {
   });
 
   const [selectedFile, setSelectedFile] = useState(null);
+  const [callListFile, setCallListFile] = useState(null);
+  const mobileRegex = /^\+91\d{10}$/;
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/;
+
+  const loadAgents = useCallback(async () => {
+    try {
+      const response = await api.get("/agents");
+      setAgents(response.data);
+    } catch (error) {
+      showMessage("error", "Failed to load agents");
+    }
+  }, []);
+
+  const loadDistributedLists = useCallback(async () => {
+    try {
+      const response = await api.get("/lists/distributed");
+      setDistributedLists(response.data.distributedLists || []);
+    } catch (error) {
+      showMessage("error", "Failed to load lists");
+    }
+  }, []);
+
+  const loadCallList = useCallback(async () => {
+    try {
+      const response = await api.get("/call-list");
+      setCallList(response.data.callList || []);
+    } catch (error) {
+      showMessage("error", "Failed to load call list");
+    }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -26,27 +58,30 @@ function Dashboard() {
       navigate("/login");
       return;
     }
-
     loadAgents();
     loadDistributedLists();
-  }, [navigate]);
+    loadCallList();
+  }, [navigate, loadAgents, loadDistributedLists, loadCallList]);
 
-  const loadAgents = async () => {
-    try {
-      const response = await api.get("/agents");
-      setAgents(response.data);
-    } catch (error) {
-      console.error("Error loading agents:", error);
-      showMessage("error", "Failed to load agents");
-    }
-  };
+  const handleCallRecord = async (record) => {
+    setLoading(true);
+    setMessage({ type: "", text: "" });
 
-  const loadDistributedLists = async () => {
     try {
-      const response = await api.get("/lists/distributed");
-      setDistributedLists(response.data.distributedLists || []);
+      await api.patch(`/call-list/${record.id}/complete`);
+      showMessage("success", "Call marked as completed");
+      await loadCallList();
+
+      if (record.mobile) {
+        window.location.href = `tel:${record.mobile}`;
+      }
     } catch (error) {
-      console.error("Error loading distributed lists:", error);
+      showMessage(
+        "error",
+        error.response?.data?.message || "Failed to update call status",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -67,21 +102,117 @@ function Dashboard() {
     });
   };
 
+  const resetForm = () => {
+    setAgentForm({ name: "", email: "", mobile: "", password: "" });
+    setEditingAgent(null);
+  };
+
   const handleCreateAgent = async (e) => {
     e.preventDefault();
+    const mobileValue = String(agentForm.mobile || "").trim();
+    if (!mobileRegex.test(mobileValue)) {
+      showMessage("error", "Mobile must be in format +91 followed by 10 digits");
+      return;
+    }
+    const passwordValue = String(agentForm.password || "");
+    if (!passwordRegex.test(passwordValue)) {
+      showMessage(
+        "error",
+        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+      );
+      return;
+    }
     setLoading(true);
     setMessage({ type: "", text: "" });
 
     try {
-      await api.post("/agents", agentForm);
+      await api.post("/agents", { ...agentForm, mobile: mobileValue });
       showMessage("success", "Agent created successfully");
-      setAgentForm({ name: "", email: "", mobile: "", password: "" });
+      resetForm();
       loadAgents();
     } catch (error) {
-      showMessage(
-        "error",
-        error.response?.data?.message || "Failed to create agent",
-      );
+      showMessage("error", error.response?.data?.message || "Failed to create agent");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditClick = (agent) => {
+    setEditingAgent(agent._id);
+    setAgentForm({
+      name: agent.name,
+      email: agent.email,
+      mobile: agent.mobile,
+      password: "",
+    });
+  };
+
+  const handleUpdateAgent = async (e) => {
+    e.preventDefault();
+    
+    if (!editingAgent) {
+      showMessage("error", "No agent selected for editing");
+      return;
+    }
+
+    const mobileValue = String(agentForm.mobile || "").trim();
+    if (!mobileRegex.test(mobileValue)) {
+      showMessage("error", "Mobile must be in format +91 followed by 10 digits");
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      const updateData = {
+        name: agentForm.name,
+        email: agentForm.email,
+        mobile: mobileValue,
+      };
+
+      if (agentForm.password && agentForm.password.trim() !== "") {
+        if (!passwordRegex.test(String(agentForm.password))) {
+          showMessage(
+            "error",
+            "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+          );
+          setLoading(false);
+          return;
+        }
+        updateData.password = agentForm.password;
+      }
+
+      await api.put(`/agents/${editingAgent}`, updateData);
+      showMessage("success", "Agent updated successfully");
+      resetForm();
+      loadAgents();
+    } catch (error) {
+      if (error.response?.status === 404) {
+        showMessage("error", "Agent not found. Please refresh the page.");
+      } else {
+        const errorMessage = error.response?.data?.message || error.message || "Failed to update agent";
+        showMessage("error", errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAgent = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this agent?")) {
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      await api.delete(`/agents/${id}`);
+      showMessage("success", "Agent deleted successfully");
+      loadAgents();
+    } catch (error) {
+      showMessage("error", error.response?.data?.message || "Failed to delete agent");
     } finally {
       setLoading(false);
     }
@@ -96,6 +227,20 @@ function Dashboard() {
         setMessage({ type: "", text: "" });
       } else {
         showMessage("error", "Only CSV, XLSX, and XLS files are allowed");
+        e.target.value = "";
+      }
+    }
+  };
+
+  const handleCallListFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const ext = file.name.split(".").pop().toLowerCase();
+      if (ext === "csv") {
+        setCallListFile(file);
+        setMessage({ type: "", text: "" });
+      } else {
+        showMessage("error", "Only CSV files are allowed for Call List upload");
         e.target.value = "";
       }
     }
@@ -126,13 +271,70 @@ function Dashboard() {
       e.target.reset();
       loadDistributedLists();
     } catch (error) {
+      showMessage("error", error.response?.data?.message || "Failed to upload file");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCallListUpload = async (e) => {
+    e.preventDefault();
+    if (!callListFile) {
+      showMessage("error", "Please select a CSV file for Call List");
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      const formData = new FormData();
+      formData.append("file", callListFile);
+
+      await api.post("/call-list", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      showMessage("success", "Call list CSV uploaded and distributed successfully");
+      setCallListFile(null);
+      await loadCallList();
+    } catch (error) {
       showMessage(
         "error",
-        error.response?.data?.message || "Failed to upload file",
+        error.response?.data?.message || error.message || "Failed to upload Call List CSV",
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearCallList = async () => {
+    if (!window.confirm("Are you sure you want to remove all call records?")) {
+      return;
+    }
+
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+
+    try {
+      await api.delete("/call-list");
+      showMessage("success", "All call records have been removed");
+      await loadCallList();
+    } catch (error) {
+      showMessage(
+        "error",
+        error.response?.data?.message || error.message || "Failed to remove call records",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDistributeCallList = async () => {
+    // No longer used (distribution happens automatically on upload)
+    return;
   };
 
   return (
@@ -167,12 +369,18 @@ function Dashboard() {
           >
             Distributed Lists
           </button>
+          <button
+            className={`tab ${activeTab === "callList" ? "active" : ""}`}
+            onClick={() => setActiveTab("callList")}
+          >
+            Call List
+          </button>
         </div>
         {activeTab === "agents" && (
           <div>
             <div className="card">
-              <h3>Add New Agent</h3>
-              <form onSubmit={handleCreateAgent}>
+              <h3>{editingAgent ? "Edit Agent" : "Add New Agent"}</h3>
+              <form onSubmit={editingAgent ? handleUpdateAgent : handleCreateAgent}>
                 <div className="form-row">
                   <div className="form-group">
                     <label>Name</label>
@@ -197,34 +405,46 @@ function Dashboard() {
                 </div>
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Mobile Number (with country code)</label>
+                    <label>Mobile Number</label>
                     <input
                       type="text"
                       name="mobile"
                       value={agentForm.mobile}
                       onChange={handleAgentFormChange}
-                      placeholder="+1234567890"
+                      placeholder="+919876543210"
                       required
                     />
                   </div>
                   <div className="form-group">
-                    <label>Password</label>
+                    <label>Password {editingAgent && "(leave empty to keep current)"}</label>
                     <input
                       type="password"
                       name="password"
                       value={agentForm.password}
                       onChange={handleAgentFormChange}
-                      required
+                      required={!editingAgent}
                     />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={loading}
-                >
-                  {loading ? "Creating..." : "Create Agent"}
-                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={loading}
+                  >
+                    {loading ? "Saving..." : editingAgent ? "Update Agent" : "Create Agent"}
+                  </button>
+                  {editingAgent && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={resetForm}
+                      disabled={loading}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
 
@@ -239,6 +459,7 @@ function Dashboard() {
                       <th>Name</th>
                       <th>Email</th>
                       <th>Mobile</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -247,6 +468,22 @@ function Dashboard() {
                         <td>{agent.name}</td>
                         <td>{agent.email}</td>
                         <td>{agent.mobile}</td>
+                        <td>
+                          <button
+                            onClick={() => handleEditClick(agent)}
+                            className="btn btn-small"
+                            style={{ marginRight: "5px" }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAgent(agent._id)}
+                            className="btn btn-small btn-danger"
+                            disabled={loading}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -304,7 +541,14 @@ function Dashboard() {
                     <strong>Email:</strong> {group.agent.email}
                   </p>
                   <p>
-                    <strong>Mobile:</strong> {group.agent.mobile}
+                    <strong>Mobile:</strong> {group.agent.mobile}{" "}
+                    <a
+                      href={`tel:${group.agent.mobile}`}
+                      className="btn btn-small"
+                      style={{ marginLeft: "8px" }}
+                    >
+                      Call
+                    </a>
                   </p>
                   <table>
                     <thead>
@@ -327,6 +571,106 @@ function Dashboard() {
                 </div>
               ))
             )}
+          </div>
+        )}
+        {activeTab === "callList" && (
+          <div>
+            <div className="card" style={{ marginBottom: "20px" }}>
+              <h3>Upload Call List CSV</h3>
+              <p className="info-text">
+                Upload a CSV file with columns like: Record no, Name, Mobile no, Email.
+              </p>
+              <form onSubmit={handleCallListUpload}>
+                <div className="form-group">
+                  <label>Select Call List CSV</label>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleCallListFileChange}
+                    required
+                  />
+                </div>
+                {callListFile && (
+                  <p className="success">Selected: {callListFile.name}</p>
+                )}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={loading || !callListFile}
+                >
+                  {loading ? "Uploading..." : "Upload Call List"}
+                </button>
+              </form>
+            </div>
+
+            <div className="card">
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "10px",
+                }}
+              >
+                <h3 style={{ margin: 0 }}>Call List ({callList.length})</h3>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    className="btn btn-small btn-danger"
+                    onClick={handleClearCallList}
+                    disabled={loading || callList.length === 0}
+                  >
+                    Remove All
+                  </button>
+                </div>
+              </div>
+              {callList.length === 0 ? (
+                <p>No call records available.</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Record No</th>
+                      <th>Name</th>
+                      <th>Mobile</th>
+                      <th>Email</th>
+                      <th>Agent</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {callList.map((record) => (
+                      <tr key={record.id}>
+                        <td>{record.recordNo}</td>
+                        <td>{record.name}</td>
+                        <td>{record.mobile}</td>
+                        <td>{record.email}</td>
+                        <td>{record.agent?.name || "-"}</td>
+                        <td>
+                          {record.status === "completed" ? "Completed" : "Pending"}
+                        </td>
+                        <td>
+                          <button
+                            className="btn btn-small"
+                            style={{
+                              backgroundColor:
+                                record.status === "completed" ? "#6c757d" : "#28a745",
+                              borderColor:
+                                record.status === "completed" ? "#6c757d" : "#28a745",
+                              color: "#ffffff",
+                            }}
+                            disabled={loading || record.status === "completed"}
+                            onClick={() => handleCallRecord(record)}
+                          >
+                            {record.status === "completed" ? "Done" : "Call"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         )}
       </div>
